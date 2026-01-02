@@ -8,11 +8,11 @@ export default function Header() {
                     <div className="flex-shrink-0 flex items-center">
                         <div className="flex items-center">
                             <img
-                                className="h-15.5 w-auto translate-y-0.75"
+                                className="h-12 w-auto translate-y-0.75"
                                 src="/favicon.png"
                                 alt="Hatchway Logo"
                             />
-                            <h1 className="ml-0.5 text-2xl font-bold text-gray-900">Hatchway</h1>
+                            <h1 className="ml-0.5 font-semibold text-gray-900 text-4xl leading-none">Hatchway</h1>
                         </div>
                     </div>
 
