@@ -52,7 +52,7 @@ export default function Home() {
 									Map your path from idea to stage-ready pitch.
 								</p>
 								<p className="text-xs text-slate-400">
-									Prototype only  no real AI calls yet.
+									Prototype only — no real AI calls yet.
 								</p>
 							</div>
 						</div>
