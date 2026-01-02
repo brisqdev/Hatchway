@@ -5,6 +5,6 @@
       "**/node_modules"
     ],
     "include": [],
-    "entrypoint": "index.ts"
+    "entrypoint": "index.js"
   }
 }
