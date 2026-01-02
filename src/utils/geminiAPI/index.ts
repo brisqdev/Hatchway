@@ -1,98 +1,83 @@
-// deno-lint-ignore-file no-explicit-any
-import { serve } from "https://deno.land/std@0.203.0/http/server.ts";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import type {
+  GenerateContentResponse,
+  GenerateContentStreamResult,
+} from "npm:@google/generative-ai";
 
-// --- Configuration ---
-const KEY_ENV = Deno.env.get("API_KEYS") || "";
-const API_KEYS: string[] = KEY_ENV.startsWith("[")
-  ? JSON.parse(KEY_ENV)
-  : KEY_ENV.split(",").map(k => k.trim()).filter(k => k);
+// Load API key from environment
+const API_KEY = Deno.env.get("GEMINI_API_KEY");
+if (!API_KEY) throw new Error("Missing GEMINI_API_KEY");
 
-const DEFAULT_BASE = "https://generativelanguage.googleapis.com/v1beta2";
-const API_BASE_URL = Deno.env.get("GEMINI_API_BASE_URL") || DEFAULT_BASE;
+// Initialize Gemini client
+const ai = new GoogleGenerativeAI(API_KEY);
 
-const ACCESS_TOKEN = Deno.env.get("ACCESS_TOKEN");
-
-let currentKeyIndex = 0;
-interface KeyState { exhaustedUntil?: number; }
-const keyStates: KeyState[] = API_KEYS.map(() => ({}));
-
-function getNextKeyIndex(): number | null {
-  const now = Date.now();
-  for (let i = 0; i < API_KEYS.length; i++) {
-    const idx = (currentKeyIndex + i) % API_KEYS.length;
-    const state = keyStates[idx];
-    if (!state.exhaustedUntil || state.exhaustedUntil < now) {
-      currentKeyIndex = (idx + 1) % API_KEYS.length;
-      return idx;
-    }
+export default async function handler(req: Request): Promise<Response> {
+  if (req.method !== "POST") {
+    return new Response("Method Not Allowed", { status: 405 });
   }
-  return null;
-}
 
-serve(async (req: Request) => {
-  try {
-    if (ACCESS_TOKEN) {
-      const provided = req.headers.get("X-Access-Token");
-      if (provided !== ACCESS_TOKEN) {
-        return new Response("Unauthorized", { status: 401 });
+  // Parse JSON body
+  const { prompt, latitude, longitude } = await req.json();
+
+  if (!prompt || latitude == null || longitude == null) {
+    return new Response(
+      JSON.stringify({ error: "Missing prompt, latitude, or longitude" }),
+      { status: 400 }
+    );
+  }
+
+  // Configure model with search + maps grounding
+  const model = ai.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    generationConfig: { temperature: 1.0 },
+    tools: [
+      { googleSearch: {} },
+      { googleMaps: { enableWidget: true } },
+    ],
+    toolConfig: {
+      retrievalConfig: { latLng: { latitude, longitude } },
+    },
+  });
+
+  // Generate streaming content
+  const result: GenerateContentStreamResult = await model.generateContentStream({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 1.0 },
+  });
+
+  let fullText = "";
+
+  // Create a stream to send partial responses to the client
+  const stream = new ReadableStream({
+    async start(controller) {
+      for await (const chunk of result.stream) {
+        const text = chunk.text();
+        if (text) {
+          fullText += text;
+          controller.enqueue(new TextEncoder().encode(text));
+        }
       }
-    }
+      controller.close();
+    },
+  });
 
-    const reqUrl = new URL(req.url);
-    const targetUrl = new URL(reqUrl.pathname + reqUrl.search, API_BASE_URL);
-    let keyIndex = getNextKeyIndex();
-    if (keyIndex === null) {
-      console.error("All API keys are exhausted – cannot fulfill request");
-      return new Response(`All API keys exhausted (quota exceeded).`, { status: 429 });
-    }
-    let apiKey = API_KEYS[keyIndex];
-    targetUrl.searchParams.set("key", apiKey);
+  // Optional: get final response metadata
+  const finalResponse: GenerateContentResponse = await result.response;
+  const grounding = finalResponse.candidates?.[0]?.groundingMetadata;
 
-    const forwardHeaders = new Headers();
-    for (const [h, v] of req.headers) {
-      const lower = h.toLowerCase();
-      if (["host", "cookie", "authorization"].includes(lower)) continue;
-      forwardHeaders.set(h, v);
+  if (grounding?.groundingChunks?.length) {
+    console.log("Sources:");
+    console.log("-".repeat(40));
+    for (const chunk of grounding.groundingChunks) {
+      if (chunk.web) console.log(`- ${chunk.web.title}: ${chunk.web.uri}`);
+      if (chunk.maps) console.log(`- ${chunk.maps.title}: ${chunk.maps.uri}`);
     }
-    if (!forwardHeaders.has("content-type") && req.headers.has("content-type")) {
-      forwardHeaders.set("content-type", req.headers.get("content-type")!);
-    }
-
-    let response = await fetch(targetUrl.toString(), {
-      method: req.method,
-      headers: forwardHeaders,
-      body: req.body,
-    });
-
-    let attemptCount = 1;
-    while ([401, 403, 429].includes(response.status) && attemptCount < API_KEYS.length) {
-      console.warn(`Key ${keyIndex} returned status ${response.status}. Switching API key...`);
-      keyStates[keyIndex] = { exhaustedUntil: Date.now() + 60 * 60 * 1000 };
-      keyIndex = getNextKeyIndex();
-      if (keyIndex === null) break;
-      apiKey = API_KEYS[keyIndex];
-      targetUrl.searchParams.set("key", apiKey);
-      attemptCount++;
-      response = await fetch(targetUrl.toString(), {
-        method: req.method,
-        headers: forwardHeaders,
-        body: req.body,
-      });
-    }
-
-    if ([401, 403, 429].includes(response.status)) {
-      console.error("All API keys exhausted or invalid. Returning error to client.");
-      return new Response(`Error: All API keys exhausted or invalid. (${response.status})`, { status: 429 });
-    }
-
-    const resHeaders = new Headers(response.headers);
-    resHeaders.set("Access-Control-Allow-Origin", "*");
-    return new Response(response.body, {
-      status: response.status,
-      headers: resHeaders
-    });
-  } catch (err: any) {
-    console.error("Edge function error:", err);
-    return new Response("Internal error in key rotator", { status: 500 });
   }
-});
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Transfer-Encoding": "chunked",
+    },
+  });
+}
