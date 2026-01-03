@@ -1,5 +1,4 @@
-
-import { GoogleGenerativeAI} from "npm:@google/generative-ai";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 
 const API_KEY = Deno.env.get("GEMINI_API_KEY");
 if (!API_KEY) {
@@ -8,16 +7,36 @@ if (!API_KEY) {
 
 const ai = new GoogleGenerativeAI(API_KEY);
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type"
+};
+
 Deno.serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: CORS_HEADERS
+    });
+  }
+
   if (req.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 });
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: CORS_HEADERS
+    });
   }
 
   let body;
   try {
     body = await req.json();
   } catch {
-    return new Response("Invalid JSON", { status: 400 });
+    return new Response("Invalid JSON", {
+      status: 400,
+      headers: CORS_HEADERS
+    });
   }
 
   const { appName, appDescription, city } = body;
@@ -27,7 +46,13 @@ Deno.serve(async (req) => {
       JSON.stringify({
         error: "appName, appDescription, and city are required"
       }),
-      { status: 400 }
+      {
+        status: 400,
+        headers: {
+          ...CORS_HEADERS,
+          "Content-Type": "application/json"
+        }
+      }
     );
   }
 
@@ -93,8 +118,6 @@ Return exactly 12 results.
   try {
     const model = ai.getGenerativeModel({
       model: "gemini-2.5-flash",
-
-      // ✅ Grounding tools preserved
       tools: [
         { googleSearch: {} },
         { googleMaps: { enableWidget: false } }
@@ -103,25 +126,28 @@ Return exactly 12 results.
 
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.6
-      }
+      generationConfig: { temperature: 0.6 }
     });
 
     const text =
       result.response.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!text) {
-      throw new Error("Empty model response");
-    }
-
     return new Response(text, {
-      headers: { "Content-Type": "application/json" }
+      headers: {
+        ...CORS_HEADERS,
+        "Content-Type": "application/json"
+      }
     });
   } catch (err) {
     return new Response(
       JSON.stringify({ error: err.message }),
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          ...CORS_HEADERS,
+          "Content-Type": "application/json"
+        }
+      }
     );
   }
 });

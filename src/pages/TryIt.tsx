@@ -1,17 +1,77 @@
-import * as Dialog from '@radix-ui/react-dialog'
-import * as Checkbox from '@radix-ui/react-checkbox'
-import { Link as RouterLink } from 'react-router-dom'
-import { ShieldCheck, FileText, Link as LinkIcon, AlertTriangle, CalendarClock } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+"use client";
+
+import { useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import * as Checkbox from "@radix-ui/react-checkbox";
+import { Link as RouterLink } from "react-router-dom";
+import {
+	ShieldCheck,
+	FileText,
+	Link as LinkIcon,
+	AlertTriangle,
+	CalendarClock,
+} from "lucide-react";
+import {
+	Card,
+	CardHeader,
+	CardTitle,
+	CardDescription,
+	CardContent,
+	CardFooter,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 
 export default function TryIt() {
+	// Gemini Call Function
+	async function geminiCall(name: string, description: string, city: string) {
+		try {
+			setButtonDisabled(true);
+			setButtonSpinner(true);
 
-	// Placeholder state for whether fields are filled
-	let appNameField = false;
-	let shortDescriptionField = false;
-	let cityField = false;
+			const res = await fetch(
+				"https://hatchway-b55ns56k4f2c.brisqdev.deno.net/",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						appName: name,
+						appDescription: description,
+						city,
+					}),
+				}
+			);
+
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+			const data = await res.json();
+			console.log("Success:", data);
+		} catch (err) {
+			console.error("Error:", err);
+		} finally {
+			setButtonVariantPrimary(true);
+			setButtonDisabled(false);
+			setButtonSpinner(false);
+		}
+	}
+
+
+	// Placeholder state for fields
+	const [appName, setAppName] = useState("");
+	const [appDescription, setAppDescription] = useState("");
+	const [largeCity, setLargeCity] = useState("");
+
+	// Check for fields... filled
+	const responseClick: boolean =
+		appName.trim().length > 0 &&
+		appDescription.trim().length > 0 &&
+		largeCity.trim().length > 0;
+
+	// Button UI fields
+	const [buttonVariantPrimary, setButtonVariantPrimary] = useState(true);
+	const [buttonDisabled, setButtonDisabled] = useState(false);
+	const [buttonSpinner, setButtonSpinner] = useState(false);
 
 	return (
 		<div className="mx-auto max-w-6xl px-4 pb-12 pt-10 lg:pt-12">
@@ -37,19 +97,27 @@ export default function TryIt() {
 								<label htmlFor="app-name" className="text-slate-200 ml-1">
 									App name
 								</label>
-								<Input className='mt-2'
+								<Input
+									className="mt-2"
 									id="app-name"
 									placeholder="e.g. Hatchline, Signalboard"
+									value={appName}
+									onChange={(e) => setAppName(e.target.value)}
 								/>
 							</div>
 							<div className="space-y-1.5 text-sm">
-								<label htmlFor="app-description" className="text-slate-200 ml-1">
+								<label
+									htmlFor="app-description"
+									className="text-slate-200 ml-1"
+								>
 									Short description
 								</label>
 								<textarea
 									id="app-description"
 									rows={4}
 									placeholder="Describe what you are building and who it serves."
+									value={appDescription}
+									onChange={(e) => setAppDescription(e.target.value)}
 									className="mt-2 min-h-[120px] w-full resize-none rounded-xl border border-slate-800/80 bg-slate-950/70 px-3 py-2 text-sm text-slate-50 shadow-sm outline-none transition focus-visible:border-sky-500 focus-visible:ring-2 focus-visible:ring-sky-500/60 placeholder:text-slate-500"
 								/>
 							</div>
@@ -57,15 +125,44 @@ export default function TryIt() {
 								<label htmlFor="city" className="text-slate-200 ml-1">
 									Closest Large City
 								</label>
-								<Input id="city" placeholder="e.g. Toronto, New York, San Francisco" className='mt-2'/>
+								<Input
+									id="city"
+									placeholder="e.g. Toronto, New York, San Francisco"
+									className="mt-2"
+									value={largeCity}
+									onChange={(e) => setLargeCity(e.target.value)}
+								/>
 							</div>
 						</CardContent>
 						<CardFooter className="flex items-center justify-between gap-4 border-t border-slate-800/100 pt-4 -space-y-3.5">
 							<p className="text-[12px] text-slate-400">
-								By generating matches, you agree to our <a className="font-semibold" href="/privacy">Privacy Policy</a> and <a className="font-semibold" href="/terms">Terms of Service</a>.
+								By generating matches, you agree to our{" "}
+								<a className="font-semibold" href="/privacy">
+									Privacy Policy
+								</a>{" "}
+								and{" "}
+								<a className="font-semibold" href="/terms">
+									Terms of Service
+								</a>
+								.
 							</p>
-							<Button variant={(appNameField && shortDescriptionField && cityField)? "primary" : "secondary"} size="md" className='-mb-4'>
-								Generate matches
+							<Button
+								variant={buttonVariantPrimary ? (responseClick ? "primary" : "secondary") : "secondary"}
+								disabled={buttonDisabled ? true : !responseClick}
+								size="md"
+								className="-mb-4"
+								onClick={() => {
+									setButtonVariantPrimary(false);
+									setButtonDisabled(true);
+									setButtonSpinner(true);
+
+									geminiCall(
+										appName.trim(),
+										appDescription.trim(),
+										largeCity.trim());
+								}}
+							>
+								{buttonSpinner ? <Spinner /> : ""} Generate Matches
 							</Button>
 						</CardFooter>
 					</Card>
@@ -91,45 +188,39 @@ export default function TryIt() {
 						dateRange="October 17-19, 2026"
 						slotDetails="Early-stage SaaS and devtools track, 15-minute lightning pitches plus office hours."
 					/>
-					<ResultCard
-						typeLabel="Meetup"
-						title="Indie Builders Espresso Club"
-						city="New York, USA"
-						matchScore="8.4 / 10 match"
-						imageUrl="https://images.pexels.com/photos/1181567/pexels-photo-1181567.jpeg?auto=compress&cs=tinysrgb&w=1200"
-						dateRange="First Thursday of every month"
-						slotDetails="Small roundtable in a downtown cafe with founders trading product demos and intros."
-					/>
-					<ResultCard
-						typeLabel="Pitch deck session"
-						title="Seed-stage remote pitch review"
-						city="Virtual"
-						matchScore="8.9 / 10 match"
-						imageUrl="https://images.pexels.com/photos/1181675/pexels-photo-1181675.jpeg?auto=compress&cs=tinysrgb&w=1200"
-						dateRange="Rolling office hours, next window in November 2026"
-						slotDetails="Partner office hours focusing on storytelling, traction slides, and realistic roadmaps."
-					/>
 				</div>
 			</section>
 		</div>
-	)
+	);
 }
 
 type ResultCardProps = {
-	typeLabel: string
-	title: string
-	city: string
-	matchScore: string
-	imageUrl: string
-	dateRange: string
-	slotDetails: string
-}
+	typeLabel: string;
+	title: string;
+	city: string;
+	matchScore: string;
+	imageUrl: string;
+	dateRange: string;
+	slotDetails: string;
+};
 
-function ResultCard({ typeLabel, title, city, matchScore, imageUrl, dateRange, slotDetails }: ResultCardProps) {
+function ResultCard({
+	typeLabel,
+	title,
+	city,
+	matchScore,
+	imageUrl,
+	dateRange,
+	slotDetails,
+}: ResultCardProps) {
 	return (
 		<Card className="flex h-full flex-col overflow-hidden border-slate-800/80 bg-slate-950/80">
 			<div className="relative h-32 w-full overflow-hidden">
-				<img src={imageUrl} alt={title} className="h-full w-full object-cover" />
+				<img
+					src={imageUrl}
+					alt={title}
+					className="h-full w-full object-cover"
+				/>
 				<div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-900/20 to-transparent" />
 				<div className="absolute left-3 top-3 inline-flex items-center rounded-full bg-slate-950/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-200">
 					{typeLabel}
@@ -142,7 +233,9 @@ function ResultCard({ typeLabel, title, city, matchScore, imageUrl, dateRange, s
 					<p className="text-xs text-slate-400">{slotDetails}</p>
 				</div>
 				<div className="flex items-center justify-between pt-1">
-					<p className="text-[11px] font-semibold text-emerald-300">{matchScore}</p>
+					<p className="text-[11px] font-semibold text-emerald-300">
+						{matchScore}
+					</p>
 					<Dialog.Root>
 						<Dialog.Trigger asChild>
 							<button className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[11px] font-medium text-slate-100 transition hover:border-sky-400 hover:text-sky-100">
@@ -174,9 +267,9 @@ function ResultCard({ typeLabel, title, city, matchScore, imageUrl, dateRange, s
 								</div>
 							</Dialog.Content>
 						</Dialog.Portal>
-						</Dialog.Root>
-					</div>
-				</CardContent>
-			</Card>
-	)
+					</Dialog.Root>
+				</div>
+			</CardContent>
+		</Card>
+	);
 }
