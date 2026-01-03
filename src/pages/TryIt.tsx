@@ -7,6 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 export default function TryIt() {
+
+	// Placeholder state for whether fields are filled
+	let appNameField = false;
+	let shortDescriptionField = false;
+	let cityField = false;
+
 	return (
 		<div className="mx-auto max-w-6xl px-4 pb-12 pt-10 lg:pt-12">
 			<div className="flex flex-col gap-10 lg:flex-row">
@@ -58,7 +64,7 @@ export default function TryIt() {
 							<p className="text-[12px] text-slate-400">
 								By generating matches, you agree to our <a className="font-semibold" href="/privacy">Privacy Policy</a> and <a className="font-semibold" href="/terms">Terms of Service</a>.
 							</p>
-							<Button variant="primary" size="md" className='-mb-4'>
+							<Button variant={(appNameField && shortDescriptionField && cityField)? "primary" : "secondary"} size="md" className='-mb-4'>
 								Generate matches
 							</Button>
 						</CardFooter>
