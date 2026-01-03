@@ -1,46 +1,66 @@
+import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+
 const API_KEY = Deno.env.get("GEMINI_API_KEY");
 if (!API_KEY) throw new Error("Missing GEMINI_API_KEY");
 
-async function generateContentWithSearchAndMapsGrounding(prompt, latitude, longitude) {
-  // Use the Generative Language REST API so this runs on Deno Deploy / Deno edge functions.
-  // Note: tool grounding (googleSearch/googleMaps) via the SDK may not be available via REST.
-  // If you need grounded tools, consider a server runtime that supports the official SDK, or
-  // implement your own retrieval step and pass results into the prompt.
+const ai = new GoogleGenerativeAI(API_KEY);
 
-  const url =
-    "https://generativelanguage.googleapis.com/v1beta2/models/gemini-2.5-flash:generateMessage";
-
-  const body = {
-    // Keep the request simple and compatible with REST API surface.
-    // If your API expects a different shape, adapt accordingly.
-    messages: [{ role: "user", content: [{ text: prompt }] }],
-    temperature: 1.0,
-  };
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${API_KEY}`,
-      "Content-Type": "application/json",
+async function generateContentWithSearchAndMapsGrounding(
+  prompt,
+  latitude,
+  longitude,
+  streamController
+) {
+  const model = ai.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    generationConfig: {
+      temperature: 1.0,
     },
-    body: JSON.stringify(body),
+    tools: [
+      { googleSearch: {} },
+      { googleMaps: { enableWidget: true } },
+    ],
+    toolConfig: {
+      retrievalConfig: {
+        latLng: {
+          latitude,
+          longitude,
+        },
+      },
+    },
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Generative API error: ${res.status} ${text}`);
+  const result = await model.generateContentStream({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 1.0,
+    },
+  });
+
+  let fullText = "";
+
+  for await (const chunk of result.stream) {
+    const text = chunk.text();
+    if (text) {
+      fullText += text;
+      streamController.enqueue(new TextEncoder().encode(text));
+    }
   }
 
-  const data = await res.json();
+  // Final aggregated response (metadata)
+  const finalResponse = await result.response;
+  const grounding = finalResponse.candidates?.[0]?.groundingMetadata;
 
-  // Attempt to extract text from common response shapes. Adjust if your API responds differently.
-  const text =
-    data.candidates?.[0]?.content?.[0]?.text ||
-    data.output?.[0]?.content?.text ||
-    data.candidates?.[0]?.message?.content?.[0]?.text ||
-    JSON.stringify(data);
+  if (grounding?.groundingChunks?.length) {
+    console.log("Sources:");
+    console.log("-".repeat(40));
+    for (const chunk of grounding.groundingChunks) {
+      if (chunk.web) console.log(`- ${chunk.web.title}: ${chunk.web.uri}`);
+      if (chunk.maps) console.log(`- ${chunk.maps.title}: ${chunk.maps.uri}`);
+    }
+  }
 
-  return text;
+  return fullText;
 }
 
 export default async function handler(req) {
@@ -48,30 +68,31 @@ export default async function handler(req) {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  let payload;
-  try {
-    payload = await req.json();
-  } catch (err) {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400 });
-  }
+  const { prompt, latitude, longitude } = await req.json();
 
-  const { prompt, latitude, longitude } = payload;
   if (!prompt || latitude == null || longitude == null) {
-    return new Response(JSON.stringify({ error: "Missing prompt, latitude, or longitude" }), {
-      status: 400,
-    });
+    return new Response(
+      JSON.stringify({ error: "Missing prompt, latitude, or longitude" }),
+      { status: 400 }
+    );
   }
 
-  try {
-    const text = await generateContentWithSearchAndMapsGrounding(prompt, latitude, longitude);
-    return new Response(text, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    });
-  } catch (err) {
-    console.error(err);
-    return new Response(JSON.stringify({ error: err.message || "Internal error" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  const stream = new ReadableStream({
+    async start(controller) {
+      await generateContentWithSearchAndMapsGrounding(
+        prompt,
+        latitude,
+        longitude,
+        controller
+      );
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Transfer-Encoding": "chunked",
+    },
+  });
 }
