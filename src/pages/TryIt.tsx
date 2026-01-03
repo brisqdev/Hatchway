@@ -55,7 +55,7 @@ export default function TryIt() {
 							</div>
 							<div className="space-y-1.5 text-sm">
 								<label htmlFor="city" className="text-slate-200 ml-1">
-									City
+									Closest Large City
 								</label>
 								<Input id="city" placeholder="e.g. Toronto, New York, San Francisco" className='mt-2'/>
 							</div>

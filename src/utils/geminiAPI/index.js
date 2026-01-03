@@ -1,74 +1,71 @@
-import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import {GoogleGenerativeAI} from "npm:@google/generative-ai";
 
 const API_KEY = Deno.env.get("GEMINI_API_KEY");
-if (!API_KEY) throw new Error("Missing GEMINI_API_KEY");
+if (!API_KEY) {
+  throw new Error("Missing GEMINI_API_KEY");
+}
 
 const ai = new GoogleGenerativeAI(API_KEY);
 
-export default async function generateContentWithSearchAndMapsGrounding(
-  prompt,
-  latitude,
-  longitude
-) {
-  const model = ai.getGenerativeModel({
-    model: "gemini-2.5-flash",
-    tools: [
-      { googleSearch: {} },
-      { googleMaps: { enableWidget: true } }
-    ],
-    toolConfig: {
-      retrievalConfig: {
-        latLng: {
-          latitude,
-          longitude
+Deno.serve(async (req) => {
+  if (req.method !== "POST") {
+    return new Response("Method Not Allowed", { status: 405 });
+  }
+
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response("Invalid JSON", { status: 400 });
+  }
+
+  const { prompt, latitude, longitude } = body;
+
+  if (!prompt || latitude == null || longitude == null) {
+    return new Response(
+      JSON.stringify({ error: "prompt, latitude, longitude required" }),
+      { status: 400 }
+    );
+  }
+
+  try {
+    const model = ai.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      tools: [
+        { googleSearch: {} },
+        { googleMaps: { enableWidget: true } }
+      ],
+      toolConfig: {
+        retrievalConfig: {
+          latLng: { latitude, longitude }
         }
       }
-    }
-  });
+    });
 
-  const result = await model.generateContentStream({
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 1.0
-    }
-  });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 1.0 }
+    });
 
-  console.log("\n--- STREAMING RESPONSE ---\n");
+    const text =
+      result.response.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
-  let fullText = "";
+    const grounding =
+      result.response.candidates?.[0]?.groundingMetadata ?? null;
 
-  for await (const chunk of result.stream) {
-    const text = chunk.text();
-    if (text) {
-      process.stdout.write(text);
-      fullText += text;
-    }
-  }
-
-  console.log("\n\n--- STREAM COMPLETE ---\n");
-
-  // Final aggregated response (includes metadata)
-  const finalResponse = await result.response;
-
-  const grounding = finalResponse.candidates?.[0]?.groundingMetadata;
-
-  if (grounding?.groundingChunks?.length) {
-    console.log("Sources:");
-    console.log("-".repeat(40));
-
-    for (const chunk of grounding.groundingChunks) {
-      if (chunk.web) {
-        console.log(`- ${chunk.web.title}: ${chunk.web.uri}`);
+    return new Response(
+      JSON.stringify({
+        text,
+        grounding
+      }),
+      {
+        headers: { "Content-Type": "application/json" }
       }
-      if (chunk.maps) {
-        console.log(`- ${chunk.maps.title}: ${chunk.maps.uri}`);
-      }
-    }
+    );
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500 }
+    );
   }
-
-  if (grounding?.googleMapsWidgetContextToken) {
-    console.log("\nGoogle Maps widget token available (frontend renderable).");
-  }
-
-  return fullText;
-}
+});
