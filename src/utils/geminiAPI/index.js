@@ -1,11 +1,10 @@
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 
-const API_KEY = Deno.env.get("GEMINI_API_KEY");
-if (!API_KEY) {
-  throw new Error("Missing GEMINI_API_KEY");
+const API_KEY = Deno.env.get("GEMINI_API_KEY") || null;
+let ai = null;
+if (API_KEY) {
+  ai = new GoogleGenerativeAI(API_KEY);
 }
-
-const ai = new GoogleGenerativeAI(API_KEY);
 
 function createCorsHeaders(req) {
   const origin = req.headers.get("origin") || "*";
@@ -27,6 +26,20 @@ Deno.serve(async (req) => {
       status: 204,
       headers: createCorsHeaders(req)
     });
+  }
+
+  // If the server is misconfigured (missing API key), return a JSON error with CORS headers
+  if (!API_KEY || !ai) {
+    return new Response(
+      JSON.stringify({ error: "Server misconfigured: missing GEMINI_API_KEY" }),
+      {
+        status: 500,
+        headers: {
+          ...createCorsHeaders(req),
+          "Content-Type": "application/json"
+        }
+      }
+    );
   }
 
   if (req.method !== "POST") {
