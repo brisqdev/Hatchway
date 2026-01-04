@@ -16,31 +16,72 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
 export default function TryIt() {
+	// Types for API results
+	type ApiResult = {
+		typeLabel: string;
+		title: string;
+		city: string;
+		matchScore: string;
+		imageURL: string;
+		dateRange: string;
+		slotDetails: string;
+	};
+
+	const [results, setResults] = useState<ApiResult[]>([]);
+	const [apiError, setApiError] = useState<string | null>(null);
+
 	// Gemini Call Function
 	async function geminiCall(name: string, description: string, city: string) {
 		try {
+			setApiError(null);
 			setButtonDisabled(true);
 			setButtonSpinner(true);
 
-			const res = await fetch(
-				"https://hatchway.brisqdev.deno.net/",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						appName: name,
-						appDescription: description,
-						city,
-					}),
-				}
-			);
+			const res = await fetch("https://hatchway.brisqdev.deno.net/", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ appName: name, appDescription: description, city }),
+			});
 
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-			const data = await res.json();
-			console.log("Success:", data);
-		} catch (err) {
-			console.error("Error:", err);
+			const text = await res.text();
+
+			// Try to extract JSON even if the model wrapped it in code fences or extra text
+			function extractJsonFromText(t: string) {
+				// First try code fence capture ```json ... ```
+				const fenceMatch = t.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+				if (fenceMatch && fenceMatch[1]) return fenceMatch[1].trim();
+
+				// Otherwise try to find the first { and last } and slice
+				const first = t.indexOf("{");
+				const last = t.lastIndexOf("}");
+				if (first !== -1 && last !== -1 && last > first) {
+					return t.slice(first, last + 1);
+				}
+
+				// Fallback: return original text (will likely fail parse)
+				return t;
+			}
+
+			const jsonText = extractJsonFromText(text);
+
+			let parsed: any;
+			try {
+				parsed = JSON.parse(jsonText);
+			} catch (parseErr) {
+				throw new Error("Failed to parse API JSON response: " + (parseErr as Error).message);
+			}
+
+			if (!parsed || !Array.isArray(parsed.results)) {
+				throw new Error("API returned no results array");
+			}
+
+			setResults(parsed.results as ApiResult[]);
+		} catch (err: any) {
+			console.error("Error fetching/parsing API:", err);
+			setApiError(err?.message || String(err));
+			setResults([]);
 		} finally {
 			setButtonVariantPrimary(true);
 			setButtonDisabled(false);
@@ -171,15 +212,28 @@ export default function TryIt() {
 				</div>
 
 				<div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-					<ResultCard
-						typeLabel="Conference"
-						title="Founders in the North Summit"
-						city="Toronto, Canada"
-						matchScore="9.1 / 10 match"
-						imageUrl="https://images.pexels.com/photos/1181400/pexels-photo-1181400.jpeg?auto=compress&cs=tinysrgb&w=1200"
-						dateRange="October 17-19, 2026"
-						slotDetails="Early-stage SaaS and devtools track, 15-minute lightning pitches plus office hours."
-					/>
+					{apiError ? (
+						<div className="col-span-full rounded-xl border border-rose-600/40 bg-rose-950/10 p-4 text-sm text-rose-300">
+							Error: {apiError}
+						</div>
+					) : results.length === 0 ? (
+						<div className="col-span-full rounded-xl border border-slate-800/60 bg-slate-900/60 p-6 text-sm text-slate-400">
+							No results yet. Generate matches to see results here.
+						</div>
+					) : (
+						results.map((r, idx) => (
+							<ResultCard
+								key={idx}
+								typeLabel={r.typeLabel}
+								title={r.title}
+								city={r.city}
+								matchScore={r.matchScore}
+								imageUrl={r.imageURL}
+								dateRange={r.dateRange}
+								slotDetails={r.slotDetails}
+							/>
+						))
+					)}
 				</div>
 			</section>
 		</div>
