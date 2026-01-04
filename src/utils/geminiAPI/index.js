@@ -7,25 +7,32 @@ if (!API_KEY) {
 
 const ai = new GoogleGenerativeAI(API_KEY);
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type"
-};
+function createCorsHeaders(req) {
+  const origin = req.headers.get("origin") || "*";
+  const allowOrigin = origin === "*" ? "*" : origin;
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Max-Age": "600",
+    "Vary": "Origin"
+  };
+}
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: CORS_HEADERS
+      headers: createCorsHeaders(req)
     });
   }
 
   if (req.method !== "POST") {
     return new Response("Method Not Allowed", {
       status: 405,
-      headers: CORS_HEADERS
+      headers: createCorsHeaders(req)
     });
   }
 
@@ -35,7 +42,7 @@ Deno.serve(async (req) => {
   } catch {
     return new Response("Invalid JSON", {
       status: 400,
-      headers: CORS_HEADERS
+      headers: createCorsHeaders(req)
     });
   }
 
@@ -49,7 +56,7 @@ Deno.serve(async (req) => {
       {
         status: 400,
         headers: {
-          ...CORS_HEADERS,
+          ...createCorsHeaders(req),
           "Content-Type": "application/json"
         }
       }
@@ -134,7 +141,7 @@ Return exactly 12 results.
 
     return new Response(text, {
       headers: {
-        ...CORS_HEADERS,
+        ...createCorsHeaders(req),
         "Content-Type": "application/json"
       }
     });
@@ -144,7 +151,7 @@ Return exactly 12 results.
       {
         status: 500,
         headers: {
-          ...CORS_HEADERS,
+          ...createCorsHeaders(req),
           "Content-Type": "application/json"
         }
       }

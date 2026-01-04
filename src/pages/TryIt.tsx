@@ -23,7 +23,7 @@ export default function TryIt() {
 			setButtonSpinner(true);
 
 			const res = await fetch(
-				"https://hatchway-b55ns56k4f2c.brisqdev.deno.net/",
+				"https://hatchway.brisqdev.deno.net/",
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
