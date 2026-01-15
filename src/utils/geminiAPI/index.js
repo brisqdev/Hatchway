@@ -1,51 +1,36 @@
-import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import {
+  "deploy": {
+    "org": "brisqdev",
+    "app": "hatchway"
+  } GoogleGenerativeAI
+} from "npm:@google/generative-ai";
 
-const API_KEY = Deno.env.get("GEMINI_API_KEY") || null;
-let ai = null;
-if (API_KEY) {
-  ai = new GoogleGenerativeAI(API_KEY);
+const API_KEY = Deno.env.get("GEMINI_API_KEY");
+if (!API_KEY) {
+  throw new Error("Missing GEMINI_API_KEY");
 }
 
-function createCorsHeaders(req) {
-  const origin = req.headers.get("origin") || "*";
-  const allowOrigin = origin === "*" ? "*" : origin;
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Max-Age": "600",
-    "Vary": "Origin"
-  };
-}
+const ai = new GoogleGenerativeAI(API_KEY);
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type"
+};
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: createCorsHeaders(req)
+      headers: CORS_HEADERS
     });
-  }
-
-  // If the server is misconfigured (missing API key), return a JSON error with CORS headers
-  if (!API_KEY || !ai) {
-    return new Response(
-      JSON.stringify({ error: "Server misconfigured: missing GEMINI_API_KEY" }),
-      {
-        status: 500,
-        headers: {
-          ...createCorsHeaders(req),
-          "Content-Type": "application/json"
-        }
-      }
-    );
   }
 
   if (req.method !== "POST") {
     return new Response("Method Not Allowed", {
       status: 405,
-      headers: createCorsHeaders(req)
+      headers: CORS_HEADERS
     });
   }
 
@@ -55,7 +40,7 @@ Deno.serve(async (req) => {
   } catch {
     return new Response("Invalid JSON", {
       status: 400,
-      headers: createCorsHeaders(req)
+      headers: CORS_HEADERS
     });
   }
 
@@ -69,7 +54,7 @@ Deno.serve(async (req) => {
       {
         status: 400,
         headers: {
-          ...createCorsHeaders(req),
+          ...CORS_HEADERS,
           "Content-Type": "application/json"
         }
       }
@@ -154,7 +139,7 @@ Return exactly 12 results.
 
     return new Response(text, {
       headers: {
-        ...createCorsHeaders(req),
+        ...CORS_HEADERS,
         "Content-Type": "application/json"
       }
     });
@@ -164,7 +149,7 @@ Return exactly 12 results.
       {
         status: 500,
         headers: {
-          ...createCorsHeaders(req),
+          ...CORS_HEADERS,
           "Content-Type": "application/json"
         }
       }
