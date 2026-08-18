@@ -3,12 +3,10 @@
 <div align="center">
 
 ![Hatchway](https://img.shields.io/badge/Hatchway-Hatch%20a%20Founder-00f2fe?style=for-the-badge)
-
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-5.0-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Google Gemini](https://img.shields.io/badge/Google%20Gemini-API-8E75B2?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
-[![Hack Club](https://img.shields.io/badge/Hack%20Club-Stardance-ec3750?style=for-the-badge)](https://hackclub.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 **A copilot that helps early-stage founders find the right rooms, runways, and stages to share their ideas with the world.**
